@@ -1,0 +1,106 @@
+description: psuedo points generation based on visible light camera, infrared camera and lidar.
+
+gpus: [ 0 ]
+
+file_cfg:
+  resume_dir: null
+  resume_checkpoint: null
+  exps_root: ../work_dir/
+  note: VIL-PPGen
+
+root_dataset: &root_dataset ../data/CustomDataset_ZJU
+depth_min: &depth_min 0.0
+depth_max: &depth_max 100.0
+point_cloud_range: &point_cloud_range [ -51.2, 0.0, -6.4, 51.2, 102.4, 6.4 ]  # x_min, y_min, z_min, x_max, y_max, z_max
+voxel_size: &voxel_size [ 0.05, 0.05, 0.05 ]  # x_resolution, y_resolution, z_resolution
+spatial_shape: &spatial_shape [ 256, 2048, 2048 ]  # z_dim, y_dim, x_dim
+
+dataset_train_cfg:
+  root: *root_dataset
+  split: 'train'
+  depth_min: *depth_min
+  depth_max: *depth_max
+  point_cloud_range: *point_cloud_range
+
+dataloader_train_cfg:
+  batch_size: 4
+  num_workers: 4
+
+dataset_val_cfg:
+  root: *root_dataset
+  split: 'test'
+  depth_min: *depth_min
+  depth_max: *depth_max
+  point_cloud_range: *point_cloud_range
+
+dataloader_val_cfg:
+  batch_size: 4
+  num_workers: 4
+
+network_cfg:
+  vis_branch:
+    in_channels: 4
+    base_channels: 32
+    filter_channels: [ 32, 64 ]
+    output_channels: 128
+    depth_min: *depth_min
+    depth_max: *depth_max
+  inf_branch:
+    in_channels: 2
+    base_channels: 32
+    filter_channels: [ 32, 64 ]
+    output_channels: 128
+    depth_min: *depth_min
+    depth_max: *depth_max
+  voxelizer:
+    voxel_size: *voxel_size
+    point_cloud_range: *point_cloud_range
+    num_point_features: 3  # x, y, z
+    max_num_voxels: 20000
+    max_num_points_per_voxel: 5
+  spatial_encoder:
+    spatial_shape: *spatial_shape
+    in_channels: 3  # x, y, z
+    encode_channels: [ 16, 32, 64, 64 ]
+    decode_channels: [ 128, 128, 96, 64]
+  cost_volume_regulator:
+    in_channels: 128
+    filter_channels: [ 128, 64, 32, 16]
+    out_channels: 2  # conf, off
+  loss_weight:
+    loss_vis_coarse_depth: 1.0
+    loss_inf_coarse_depth: 1.0
+    loss_vis_refined_depth: 1.0
+    loss_inf_refined_depth: 1.0
+
+optimizer_cfg:
+  type: 'adam'
+  lr: 0.001
+  betas: [ 0.9, 0.999 ]
+  eps: 0.00000001
+  weight_decay: 0
+
+scheduler_cfg:
+  type: 'onecycle'
+  max_lr: 0.01
+  pct_start: 0.4
+  anneal_strategy: 'cos'
+  cycle_momentum: True
+  base_momentum: 0.85
+  max_momentum: 0.95
+  div_factor: 10
+
+evaluator_cfg:
+  enable: True
+  gt_depth_key: 'vis_gt_depth'
+  pred_depth_key: 'vis_refined_depth'
+  depth_grids:
+    near: [ 0.0, 30.0 ]
+    mid: [ 30.0, 60.0 ]
+    far: [ 60.0, 100.0 ]
+
+epoch_max: 100
+period_vis: 1
+period_save: 1
+max_ckpt_save_num: 10
+period_val: 10
